@@ -31,7 +31,7 @@ the setup needed.
 2. In Visual Studio:
    - Set startup project: **`CascadiaPackage`**
    - Select platform, **x64** for instance.
-- Go to `CascadiaPackage` > Properties > Debug: set **Application process** and **Background task
+   - Go to `CascadiaPackage` > Properties > Debug: set **Application process** and **Background task process** to **Native Only**
      process** to **Native Only**
    - Run (**F5**)
 

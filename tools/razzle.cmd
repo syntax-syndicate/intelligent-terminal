@@ -77,9 +77,10 @@ if not exist "%MSBUILD%" (
     echo Open a "Developer PowerShell/Command Prompt for VS", or run
     echo   Import-Module .\tools\OpenConsole.psm1; Set-MsbuildDevEnvironment
     echo in your shell before razzle, then try again.
-set PATH=%PATH%;%MSBUILD%\..;
-)
+set PATH=%PATH%;%MSBUILD%\..;
 
+for %%F in ("%MSBUILD%") do set "MSBUILD_BIN=%%~dpF"
+set "PATH=%PATH%;%MSBUILD_BIN%"
 set PATH=%PATH%%MSBUILD%\..;
 
 if "%PROCESSOR_ARCHITECTURE%" == "AMD64" (

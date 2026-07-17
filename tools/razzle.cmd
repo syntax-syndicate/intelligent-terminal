@@ -77,7 +77,8 @@ if not exist "%MSBUILD%" (
     echo Open a "Developer PowerShell/Command Prompt for VS", or run
     echo   Import-Module .\tools\OpenConsole.psm1; Set-MsbuildDevEnvironment
     echo in your shell before razzle, then try again.
-set PATH=%PATH%;%MSBUILD%\..;
+    exit /b 1
+)
 
 for %%F in ("%MSBUILD%") do set "MSBUILD_BIN=%%~dpF"
 set "PATH=%PATH%;%MSBUILD_BIN%"

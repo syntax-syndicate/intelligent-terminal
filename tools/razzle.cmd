@@ -51,9 +51,12 @@ rem Add path to MSBuild Binaries
 rem
 rem We accept the latest prerelease of VS in the 17.x or 18.x range. The -version
 rem range [17.0,19.0) picks up both VS 2022 (17.x) and VS 18 (including previews)
-rem but not a still-newer major whose toolset may be incompatible. VS 18 uses our
-rem v145 PlatformToolset (see src\common.build.pre.props); older VS versions default
-rem to v143.
+rem but not a still-newer major whose toolset may be incompatible. VS 18 uses our
+
+rem v145 PlatformToolset (see src\common.build.pre.props); older VS versions default
+
+rem to v143.
+
 rem
 for /f "usebackq tokens=*" %%B in (`%VSWHERE% -latest -prerelease -products * -requires Microsoft.Component.MSBuild -version "[17.0,19.0)" -find MSBuild\**\Bin\MSBuild.exe 2^>nul`) do (
     set MSBUILD=%%B
@@ -74,7 +77,7 @@ if not exist "%MSBUILD%" (
     echo Open a "Developer PowerShell/Command Prompt for VS", or run
     echo   Import-Module .\tools\OpenConsole.psm1; Set-MsbuildDevEnvironment
     echo in your shell before razzle, then try again.
-    exit /b 1
+set PATH=%PATH%;%MSBUILD%\..;
 )
 
 set PATH=%PATH%%MSBUILD%\..;

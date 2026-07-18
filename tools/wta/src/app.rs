@@ -1963,8 +1963,6 @@ pub struct App {
     pub state: ConnectionState,
     /// The agent ID we're trying to connect to (set at preflight/FRE time).
     pub current_agent_id: String,
-    /// Complete Copilot custom-provider metadata was supplied by Windows Terminal.
-    copilot_byok: bool,
     /// Agent ids supplied by Windows Terminal after GPO filtering.
     allowed_agent_ids: Vec<String>,
     /// Distinguishes a manual/legacy launch from an explicitly empty policy.
@@ -2278,7 +2276,6 @@ impl App {
             deferred_acp: None,
             state: ConnectionState::Connecting(t!("connection.starting").into_owned()),
             current_agent_id: String::new(),
-            copilot_byok: false,
             allowed_agent_ids: Vec::new(),
             host_agent_allowlist_present: false,
             available_agents: Vec::new(),
@@ -2722,10 +2719,6 @@ impl App {
         self.allowed_agent_ids.sort();
         self.allowed_agent_ids.dedup();
         self.refresh_available_agents();
-    }
-
-    pub fn set_copilot_byok(&mut self, enabled: bool) {
-        self.copilot_byok = enabled;
     }
 
     fn refresh_available_agents(&mut self) {
@@ -5064,8 +5057,7 @@ impl App {
                 } else {
                     "copilot".to_string()
                 };
-                let byok_handles_auth = agent_id == "copilot" && self.copilot_byok;
-                if is_auth_error && !byok_handles_auth && !self.preflight_setup_active {
+                if is_auth_error && !self.preflight_setup_active {
                     tracing::info!("AgentError auth fallback: showing setup screen");
                     tracing::info!("AgentError: resolved agent_id={}", agent_id);
                     let profile = crate::agent_registry::lookup_profile(&agent_id);
@@ -6450,21 +6442,7 @@ impl App {
                         // Install succeeded → proceed to connect or auth
                         let profile = crate::agent_registry::lookup_profile_by_id(&agent_id);
 
-                        if agent_id == "copilot" && self.copilot_byok {
-                            self.update_deferred_acp_agent(&agent_id);
-                            self.state = ConnectionState::Connecting(
-                                t!("connection.reconnecting").into_owned(),
-                            );
-                            self.preflight_setup_active = false;
-                            if self.deferred_acp.is_some() {
-                                self.pending_acp_start = true;
-                            } else {
-                                let new_cmd = self.build_agent_cmd(&agent_id);
-                                let _ = self.restart_tx.send(RestartRequest {
-                                    agent_cmd: Some(new_cmd),
-                                });
-                            }
-                        } else if agent_id == "copilot" {
+                        if agent_id == "copilot" {
                             // Copilot was just installed by IT. Route directly
                             // to sign-in instead of probing local credentials or
                             // paying for a doomed ACP auth roundtrip.
@@ -13837,33 +13815,6 @@ mod tests {
         assert!(
             !matches!(app.state, ConnectionState::Failed(_)),
             "an auth failure must not become a Failed connection-lost state"
-        );
-    }
-
-    #[test]
-    fn copilot_byok_auth_error_stays_visible_without_signin() {
-        let mut app = test_app();
-        app.state = ConnectionState::Connected;
-        app.current_agent_id = "copilot".to_string();
-        app.set_copilot_byok(true);
-        let message = "provider rejected the API key".to_string();
-
-        app.handle_event(AppEvent::AgentError {
-            session_id: None,
-            failure: crate::protocol::acp::failure::AgentFailure::AuthRequired {
-                message: message.clone(),
-            },
-            message: message.clone(),
-        });
-
-        assert_eq!(app.mode, AppMode::Chat);
-        assert!(matches!(app.state, ConnectionState::Failed(ref value) if value == &message));
-        assert!(
-            app.current_tab()
-                .messages
-                .iter()
-                .any(|entry| matches!(entry, ChatMessage::Error(value) if value == &message)),
-            "the provider error must remain visible"
         );
     }
 

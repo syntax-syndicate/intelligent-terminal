@@ -2086,11 +2086,7 @@ namespace winrt::TerminalApp::implementation
         }
         const bool copilotByok =
             effectiveAgentId == L"copilot" && _IsCopilotByokConfigured(globals);
-        if (copilotByok)
-        {
-            helperCmd += L" --copilot-byok";
-        }
-        else
+        if (!copilotByok)
         {
             appendHelperFlagValue(L"--acp-model", effectiveModel);
         }

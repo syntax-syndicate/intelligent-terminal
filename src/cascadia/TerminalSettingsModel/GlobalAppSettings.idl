@@ -116,6 +116,8 @@ namespace Microsoft.Terminal.Settings.Model
         INHERITABLE_SETTING(String, SearchWebDefaultQueryUrl);
         INHERITABLE_SETTING(String, AcpAgent);
         INHERITABLE_SETTING(String, AcpModel);
+        INHERITABLE_SETTING(String, CopilotProviderBaseUrl);
+        INHERITABLE_SETTING(String, CopilotProviderApiKeyCredential);
         INHERITABLE_SETTING(String, DelegateAgent);
         INHERITABLE_SETTING(String, DelegateModel);
         INHERITABLE_SETTING(Boolean, AutoErrorDetectionEnabled);

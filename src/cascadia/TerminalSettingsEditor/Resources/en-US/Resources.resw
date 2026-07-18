@@ -752,6 +752,34 @@ In this context, "agent" refers to an AI agent (e.g. Copilot, Claude, Gemini), n
     <value>Choose the model used by this agent.</value>
     <comment>Supplementary description for the model setting.</comment>
   </data>
+  <data name="AIAgents_CopilotProviderBaseUrl.Header" xml:space="preserve">
+    <value>Provider URL</value>
+    <comment>Header for the setting that specifies an OpenAI-compatible provider endpoint for Copilot.</comment>
+  </data>
+  <data name="AIAgents_CopilotProviderBaseUrl.HelpText" xml:space="preserve">
+    <value>OpenAI-compatible endpoint used by Copilot, for example OpenRouter, Ollama, or vLLM.</value>
+    <comment>Supplementary description for the Copilot provider URL setting.</comment>
+  </data>
+  <data name="AIAgents_CopilotProviderApiKey.Header" xml:space="preserve">
+    <value>Provider API key</value>
+    <comment>Header for the secure Copilot provider API key setting.</comment>
+  </data>
+  <data name="AIAgents_CopilotProviderApiKey.HelpText" xml:space="preserve">
+    <value>Stored securely in Windows Credential Manager and passed only to the Copilot process.</value>
+    <comment>Supplementary description for the Copilot provider API key setting.</comment>
+  </data>
+  <data name="AIAgents_CopilotProviderApiKeyInput.PlaceholderText" xml:space="preserve">
+    <value>Enter a key to add or replace the saved key</value>
+    <comment>Placeholder for the secure Copilot provider API key input.</comment>
+  </data>
+  <data name="AIAgents_CopilotProviderApiKeySave.Content" xml:space="preserve">
+    <value>Save key</value>
+    <comment>Button that saves the Copilot provider API key.</comment>
+  </data>
+  <data name="AIAgents_CopilotProviderApiKeyClear.Content" xml:space="preserve">
+    <value>Clear saved key</value>
+    <comment>Button that removes the saved Copilot provider API key.</comment>
+  </data>
   <data name="AIAgents_DelegateAgent.Header" xml:space="preserve">
     <value>Agent</value>
     <comment>Header for the setting that specifies which agent handles command palette / on-demand requests.

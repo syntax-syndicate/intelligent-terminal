@@ -73,6 +73,7 @@ namespace SettingsModelUnitTests
         TEST_METHOD(BuiltInAcpAgentRoundtrips);
         TEST_METHOD(BuiltInDelegateAgentRoundtrips);
         TEST_METHOD(AcpAndDelegateModelRoundtrip);
+        TEST_METHOD(CopilotProviderSettingsRoundtrip);
         TEST_METHOD(AgentPanePositionRoundtripsAndDefaults);
         TEST_METHOD(AutoErrorSettingsRoundtrip);
         TEST_METHOD(EffectiveAutoFixFalseWhenDetectionOff);
@@ -343,6 +344,15 @@ namespace SettingsModelUnitTests
         const auto settings = MakeSettings(R"("acpModel": "gpt-5", "delegateModel": "claude-4")");
         VERIFY_ARE_EQUAL(winrt::hstring{ L"gpt-5" }, settings->GlobalSettings().AcpModel());
         VERIFY_ARE_EQUAL(winrt::hstring{ L"claude-4" }, settings->GlobalSettings().DelegateModel());
+    }
+
+    void CustomAgentAndPolicyTests::CopilotProviderSettingsRoundtrip()
+    {
+        const auto settings = MakeSettings(
+            R"("copilotProvider.baseUrl": "https://openrouter.ai/api/v1", "copilotProvider.apiKeyCredential": "{5d49b961-9200-4cf6-8619-87cb3a408eff}")");
+        const auto& globals = settings->GlobalSettings();
+        VERIFY_ARE_EQUAL(winrt::hstring{ L"https://openrouter.ai/api/v1" }, globals.CopilotProviderBaseUrl());
+        VERIFY_ARE_EQUAL(winrt::hstring{ L"{5d49b961-9200-4cf6-8619-87cb3a408eff}" }, globals.CopilotProviderApiKeyCredential());
     }
 
     void CustomAgentAndPolicyTests::AgentPanePositionRoundtripsAndDefaults()

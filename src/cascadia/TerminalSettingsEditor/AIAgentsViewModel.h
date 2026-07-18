@@ -9,6 +9,7 @@
 #include "ViewModelHelpers.h"
 #include "Utils.h"
 #include "../inc/AgentHooksStatus.h"
+#include "../inc/CopilotByok.h"
 
 namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
 {
@@ -95,11 +96,21 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         // Probe in flight counts as "present" so the ComboBox stays
         // visible (PlaceholderText="Default") instead of flashing the
         // free-form textbox during the probe window.
-        bool HasAcpModelList() const { return _acpModelList && (_acpModelList.Size() > 0 || _acpProbing); }
+        bool HasAcpModelList() const;
         bool ShowAcpModelTextBox() const { return !HasAcpModelList(); }
         Editor::AcpModelEntry CurrentAcpModelEntry();
         void CurrentAcpModelEntry(const Editor::AcpModelEntry& value);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_GlobalSettings, AcpModel);
+        winrt::hstring CopilotProviderBaseUrl() const { return _GlobalSettings.CopilotProviderBaseUrl(); }
+        void CopilotProviderBaseUrl(const winrt::hstring& value);
+        bool ShowCopilotProvider() const;
+        winrt::hstring CopilotApiKey() const { return _copilotApiKey; }
+        void CopilotApiKey(const winrt::hstring& value);
+        bool HasCopilotApiKey() const;
+        bool CanSaveCopilotApiKey() const { return !_copilotApiKey.empty(); }
+        winrt::hstring CopilotApiKeyError() const { return _copilotApiKeyError; }
+        void SaveCopilotApiKey();
+        void ClearCopilotApiKey();
         bool ShowDelegateModel();
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_GlobalSettings, DelegateModel);
         bool AutoErrorDetectionEnabled() const;
@@ -177,6 +188,8 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         bool _isAddingCustomDelegateAgent{ false };
         winrt::hstring _customAcpCommand;
         winrt::hstring _customDelegateCommand;
+        winrt::hstring _copilotApiKey;
+        winrt::hstring _copilotApiKeyError;
 
         winrt::event_token _acpRuntimeChangedToken{};
         void _RebuildAcpModelListFromCache();

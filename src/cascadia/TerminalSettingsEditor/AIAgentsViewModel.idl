@@ -71,6 +71,14 @@ namespace Microsoft.Terminal.Settings.Editor
         // matching entry (or null when AcpModel doesn't appear in the list).
         AcpModelEntry CurrentAcpModelEntry;
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(String, AcpModel);
+        String CopilotProviderBaseUrl;
+        Boolean ShowCopilotProvider { get; };
+        String CopilotApiKey;
+        Boolean HasCopilotApiKey { get; };
+        Boolean CanSaveCopilotApiKey { get; };
+        String CopilotApiKeyError { get; };
+        void SaveCopilotApiKey();
+        void ClearCopilotApiKey();
         Boolean ShowDelegateModel { get; };
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(String, DelegateModel);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(Boolean, AutoErrorDetectionEnabled);

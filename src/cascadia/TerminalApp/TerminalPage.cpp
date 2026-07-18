@@ -42,6 +42,7 @@
 #include "OpenWindowRequestedArgs.g.cpp"
 #include "RequestMoveContentArgs.g.cpp"
 #include "TerminalPage.g.cpp"
+#include "../inc/CopilotByok.h"
 
 using namespace winrt;
 using namespace winrt::Microsoft::Management::Deployment;
@@ -1055,6 +1056,22 @@ namespace winrt::TerminalApp::implementation
         return winrt::to_string(id).starts_with("custom:");
     }
 
+    static bool _HasNonEmptyEnvironmentValue(const wchar_t* name) noexcept
+    {
+        return GetEnvironmentVariableW(name, nullptr, 0) > 1;
+    }
+
+    static bool _IsCopilotByokConfigured(
+        const winrt::Microsoft::Terminal::Settings::Model::GlobalAppSettings& globals) noexcept
+    {
+        const bool settingsConfigured =
+            !globals.CopilotProviderBaseUrl().empty() && !globals.AcpModel().empty();
+        const bool environmentConfigured =
+            _HasNonEmptyEnvironmentValue(L"COPILOT_PROVIDER_BASE_URL") &&
+            _HasNonEmptyEnvironmentValue(L"COPILOT_MODEL");
+        return settingsConfigured || environmentConfigured;
+    }
+
     // Build a launchable command line from a bare agent id (e.g. "copilot"
     // → "copilot --acp --stdio").  This is the single source of truth for
     // id-to-commandline mapping; both the settings path and the auto-detect
@@ -1115,7 +1132,10 @@ namespace winrt::TerminalApp::implementation
                 const auto detected = detectFallback();
                 if (!detected.empty())
                 {
-                    return _BuildAgentCommandLine(detected, globals.AcpModel());
+                    const auto model = detected == L"copilot" && _IsCopilotByokConfigured(globals) ?
+                                           winrt::hstring{} :
+                                           globals.AcpModel();
+                    return _BuildAgentCommandLine(detected, model);
                 }
             }
             return winrt::hstring{};
@@ -1128,7 +1148,10 @@ namespace winrt::TerminalApp::implementation
             if (!customCmd.empty()) return customCmd;
         }
 
-        return _BuildAgentCommandLine(acpAgent, globals.AcpModel());
+        const auto model = acpAgent == L"copilot" && _IsCopilotByokConfigured(globals) ?
+                               winrt::hstring{} :
+                               globals.AcpModel();
+        return _BuildAgentCommandLine(acpAgent, model);
     }
 
     // Resolve a launchable agent command line for a SPECIFIC agent id +
@@ -1390,6 +1413,8 @@ namespace winrt::TerminalApp::implementation
         return AgentSettingsSnapshot{
             std::wstring{ globals.AcpAgent() },
             std::wstring{ globals.AcpModel() },
+            std::wstring{ globals.CopilotProviderBaseUrl() },
+            std::wstring{ globals.CopilotProviderApiKeyCredential() },
             std::wstring{ globals.AcpCustomCommand() },
             std::wstring{ globals.DelegateAgent() },
             std::wstring{ globals.DelegateModel() },
@@ -1404,15 +1429,23 @@ namespace winrt::TerminalApp::implementation
         // over the protocol by _EmitAgentRuntimeConfigIfChanged and must NOT
         // trigger a teardown/rebuild here — that was the bug where changing
         // the delegate agent restarted the whole agent pane connection.
+        const bool copilotProviderChanged =
+            a.copilotProviderBaseUrl != b.copilotProviderBaseUrl ||
+            a.copilotProviderApiKeyCredential != b.copilotProviderApiKeyCredential ||
+            ((!a.copilotProviderBaseUrl.empty() || !b.copilotProviderBaseUrl.empty()) &&
+             a.acpModel != b.acpModel);
         return a.acpAgent != b.acpAgent ||
-               a.acpCustomCommand != b.acpCustomCommand;
+               a.acpCustomCommand != b.acpCustomCommand ||
+               copilotProviderChanged;
     }
 
     TerminalPage::AgentRuntimeConfigSnapshot TerminalPage::_CaptureAgentRuntimeConfig() const
     {
         const auto& globals = _settings.GlobalSettings();
+        const bool copilotByok =
+            globals.EffectiveAcpAgent() == L"copilot" && _IsCopilotByokConfigured(globals);
         return AgentRuntimeConfigSnapshot{
-            std::wstring{ globals.AcpModel() },
+            copilotByok ? std::wstring{} : std::wstring{ globals.AcpModel() },
             std::wstring{ _ResolveEffectiveDelegateAgent(globals) },
             std::wstring{ globals.DelegateModel() },
             globals.EffectiveAutoFixEnabled(),
@@ -1827,10 +1860,34 @@ namespace winrt::TerminalApp::implementation
         {
             pushFlagValue(L"--language", lang);
         }
-        pushFlagValue(L"--acp-model", globals.AcpModel());
+        const bool copilotByok =
+            globals.EffectiveAcpAgent() == L"copilot" && _IsCopilotByokConfigured(globals);
+        if (!copilotByok)
+        {
+            pushFlagValue(L"--acp-model", globals.AcpModel());
+        }
         pushFlagValue(L"--delegate-agent", _ResolveEffectiveDelegateAgent(globals));
         pushFlagValue(L"--delegate-model", globals.DelegateModel());
         return extraArgs;
+    }
+
+    std::vector<std::pair<std::wstring, std::wstring>> TerminalPage::_BuildSharedWtaEnvironment()
+    {
+        const auto& globals = _settings.GlobalSettings();
+        const auto baseUrl = globals.CopilotProviderBaseUrl();
+        const auto model = globals.AcpModel();
+        if (baseUrl.empty() || model.empty())
+        {
+            return {};
+        }
+
+        return {
+            { L"COPILOT_PROVIDER_BASE_URL", std::wstring{ baseUrl } },
+            { L"COPILOT_PROVIDER_API_KEY", L"" },
+            { L"WTA_COPILOT_CREDENTIAL_ID", std::wstring{ globals.CopilotProviderApiKeyCredential() } },
+            { L"COPILOT_PROVIDER_TYPE", L"openai" },
+            { L"COPILOT_MODEL", std::wstring{ model } },
+        };
     }
 
     // Helper+master agent-pane creation. The C++ side spawns one wta-helper as
@@ -1928,9 +1985,10 @@ namespace winrt::TerminalApp::implementation
         // is the existing one). See `_BuildSharedWtaExtraArgs` for the
         // shared arg layout.
         auto extraArgs = _BuildSharedWtaExtraArgs();
+        auto environment = _BuildSharedWtaEnvironment();
 
         auto& shared = winrt::TerminalApp::implementation::SharedWta::Instance();
-        if (!shared.AcquirePane(std::wstring_view{ wtaPath }, extraArgs))
+        if (!shared.AcquirePane(std::wstring_view{ wtaPath }, extraArgs, environment))
         {
             _agentPaneLog("_AutoCreateHiddenAgentPaneShared: SharedWta::AcquirePane failed");
             return false;
@@ -2026,7 +2084,16 @@ namespace winrt::TerminalApp::implementation
                 appendHelperFlagValue(L"--allowed-agent-ids", allowedIds);
             }
         }
-        appendHelperFlagValue(L"--acp-model", effectiveModel);
+        const bool copilotByok =
+            effectiveAgentId == L"copilot" && _IsCopilotByokConfigured(globals);
+        if (copilotByok)
+        {
+            helperCmd += L" --copilot-byok";
+        }
+        else
+        {
+            appendHelperFlagValue(L"--acp-model", effectiveModel);
+        }
         appendHelperFlagValue(L"--delegate-agent", _ResolveEffectiveDelegateAgent(globals));
         appendHelperFlagValue(L"--delegate-model", globals.DelegateModel());
         if (!globals.EffectiveAutoFixEnabled())
@@ -2777,6 +2844,12 @@ namespace winrt::TerminalApp::implementation
             (til::starts_with(_lastAgentSettings.acpAgent, L"custom:") || til::starts_with(current.acpAgent, L"custom:")) &&
             (_lastAgentSettings.acpAgent != current.acpAgent ||
              _lastAgentSettings.acpCustomCommand != current.acpCustomCommand);
+        const bool copilotProviderChanged =
+            _lastAgentSettings.copilotProviderBaseUrl != current.copilotProviderBaseUrl ||
+            _lastAgentSettings.copilotProviderApiKeyCredential != current.copilotProviderApiKeyCredential ||
+            ((!_lastAgentSettings.copilotProviderBaseUrl.empty() || !current.copilotProviderBaseUrl.empty()) &&
+             _lastAgentSettings.acpModel != current.acpModel);
+        const bool masterConfigurationChanged = customMasterArgsChanged || copilotProviderChanged;
 
         // Reentrancy guard.
         if (_agentRebuilding)
@@ -2816,7 +2889,7 @@ namespace winrt::TerminalApp::implementation
             if (auto tabImpl = _GetTabImpl(t))
             {
                 if (tabImpl->FindAgentPane() &&
-                    (customMasterArgsChanged || !tabImpl->HasAgentOverride()))
+                    (masterConfigurationChanged || !tabImpl->HasAgentOverride()))
                 {
                     hadAny = true;
                     tabsThatHadAgentPane.push_back(tabImpl);
@@ -2847,14 +2920,16 @@ namespace winrt::TerminalApp::implementation
         // (and other windows) untouched. A custom command is the exception:
         // the master cannot trust a command received from a helper, so refresh
         // its own trusted argv after the affected helpers have been torn down.
-        if (customMasterArgsChanged)
+        if (masterConfigurationChanged)
         {
             const auto wtaPath = _DetectWtaPath();
             const auto extraArgs = _BuildSharedWtaExtraArgs();
+            const auto environment = _BuildSharedWtaEnvironment();
             if (wtaPath.empty() ||
                 !winrt::TerminalApp::implementation::SharedWta::Instance().Restart(
                     std::wstring_view{ wtaPath },
-                    extraArgs))
+                    extraArgs,
+                    environment))
             {
                 _agentPaneLog("_RebuildAgentStack: custom-command SharedWta::Restart failed");
             }
@@ -2872,7 +2947,7 @@ namespace winrt::TerminalApp::implementation
         // pre-warmed stashed. Built-in changes retain the existing active-tab
         // behavior and leave overrides untouched.
         if (const auto activeTab = _GetFocusedTabImpl();
-            customMasterArgsChanged && activeTab)
+            masterConfigurationChanged && activeTab)
         {
             for (const auto& tabImpl : tabsThatHadAgentPane)
             {

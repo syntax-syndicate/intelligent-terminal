@@ -254,7 +254,8 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         //
         // Empty is already the legitimate "use whatever default the agent
         // picks" sentinel, so the empty case needs no reconciliation.
-        if (newSize > 0)
+        const bool copilotByok = ShowCopilotProvider() && !_GlobalSettings.CopilotProviderBaseUrl().empty();
+        if (newSize > 0 && !copilotByok)
         {
             const auto current = _GlobalSettings.AcpModel();
             if (!current.empty())
@@ -283,6 +284,15 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
                        L"ShowAcpModelTextBox",
                        L"AcpModel",
                        L"CurrentAcpModelEntry");
+    }
+
+    bool AIAgentsViewModel::HasAcpModelList() const
+    {
+        if (ShowCopilotProvider() && !_GlobalSettings.CopilotProviderBaseUrl().empty())
+        {
+            return false;
+        }
+        return _acpModelList && (_acpModelList.Size() > 0 || _acpProbing);
     }
 
     Editor::AgentEntry AIAgentsViewModel::_FindEntryById(
@@ -400,6 +410,84 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         return _IsKnownAgent(_GlobalSettings.AcpAgent());
     }
 
+    bool AIAgentsViewModel::ShowCopilotProvider() const
+    {
+        return !_isAddingCustomAcpAgent && _GlobalSettings.AcpAgent() == L"copilot";
+    }
+
+    void AIAgentsViewModel::CopilotProviderBaseUrl(const winrt::hstring& value)
+    {
+        if (_GlobalSettings.CopilotProviderBaseUrl() != value)
+        {
+            _GlobalSettings.CopilotProviderBaseUrl(value);
+            _NotifyChanges(L"CopilotProviderBaseUrl", L"HasAcpModelList", L"ShowAcpModelTextBox");
+        }
+    }
+
+    void AIAgentsViewModel::CopilotApiKey(const winrt::hstring& value)
+    {
+        if (_copilotApiKey != value)
+        {
+            _copilotApiKey = value;
+            _copilotApiKeyError.clear();
+            _NotifyChanges(L"CopilotApiKey", L"CanSaveCopilotApiKey", L"CopilotApiKeyError");
+        }
+    }
+
+    bool AIAgentsViewModel::HasCopilotApiKey() const
+    {
+        return !_GlobalSettings.CopilotProviderApiKeyCredential().empty();
+    }
+
+    void AIAgentsViewModel::SaveCopilotApiKey()
+    {
+        if (_copilotApiKey.empty())
+        {
+            return;
+        }
+
+        try
+        {
+            const auto credentialId = ::Microsoft::Terminal::CopilotByok::StoreApiKey(
+                _GlobalSettings.CopilotProviderApiKeyCredential(),
+                _copilotApiKey);
+            _GlobalSettings.CopilotProviderApiKeyCredential(credentialId);
+            _copilotApiKey.clear();
+            _copilotApiKeyError.clear();
+        }
+        catch (...)
+        {
+            const auto hr = wil::ResultFromCaughtException();
+            LOG_HR(hr);
+            _copilotApiKeyError = winrt::hresult_error{ hr }.message();
+        }
+        _NotifyChanges(L"CopilotApiKey",
+                       L"HasCopilotApiKey",
+                       L"CanSaveCopilotApiKey",
+                       L"CopilotApiKeyError");
+    }
+
+    void AIAgentsViewModel::ClearCopilotApiKey()
+    {
+        try
+        {
+            ::Microsoft::Terminal::CopilotByok::RemoveApiKey(_GlobalSettings.CopilotProviderApiKeyCredential());
+            _GlobalSettings.CopilotProviderApiKeyCredential(L"");
+            _copilotApiKey.clear();
+            _copilotApiKeyError.clear();
+        }
+        catch (...)
+        {
+            const auto hr = wil::ResultFromCaughtException();
+            LOG_HR(hr);
+            _copilotApiKeyError = winrt::hresult_error{ hr }.message();
+        }
+        _NotifyChanges(L"CopilotApiKey",
+                       L"HasCopilotApiKey",
+                       L"CanSaveCopilotApiKey",
+                       L"CopilotApiKeyError");
+    }
+
     bool AIAgentsViewModel::ShowDelegateModel()
     {
         // Same rationale as ShowAcpModel: show the row for custom delegate
@@ -474,6 +562,9 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
                            L"IsAddingCustomAcpAgent",
                            L"IsCustomAcpAgentSelected",
                            L"ShowAcpModel",
+                           L"ShowCopilotProvider",
+                           L"HasAcpModelList",
+                           L"ShowAcpModelTextBox",
                            L"AcpModel");
         }
     }
@@ -1107,6 +1198,12 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
 
     void AIAgentsViewModel::_TriggerAcpModelProbe()
     {
+        if (ShowCopilotProvider() && !_GlobalSettings.CopilotProviderBaseUrl().empty())
+        {
+            _acpProbing = false;
+            _RebuildAcpModelListFromCache();
+            return;
+        }
         const auto cmdline = _ResolveEffectiveAcpAgentCmdline();
         if (cmdline.empty())
         {
